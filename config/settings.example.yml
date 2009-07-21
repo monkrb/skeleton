@@ -1,0 +1,14 @@
+defaults: &defaults
+  :redis:
+    :port: 6379
+
+:development:
+  <<: *defaults
+
+:test:
+  <<: *defaults
+  :redis:
+    :port: 6380
+
+:production:
+  <<: *defaults

@@ -1,0 +1,55 @@
+body
+  :background-color white
+  :font-family "Lucida Grande", sans-serif
+  :font-size 0.8em
+  :padding 15px
+  :color #333
+
+=clearfix
+  *display:     inline-block
+  &:after
+    content:    " "
+    display:    block
+    height:     0
+    clear:      both
+    visibility: hidden
+
+.clear
+  :clear both
+  :width 100%
+  :font-size 0px
+
+= title
+  :font-family "Helvetica", sans-serif
+  :font-size 2em
+  :font-weight bold
+  :text-transform lowercase
+
+h1
+  :font-size 2em
+
+h2
+  :font-size 1.4em
+
+form
+  > p
+    label
+      +title
+
+    input
+      :font-size 2em
+      :margin 5px 0 0 0
+
+  p
+    :margin 10px 0
+
+  fieldset
+    :border-width 0
+    :padding 0
+    :margin 20px 0
+
+    legend
+      +title
+
+  span.example
+    :color #777

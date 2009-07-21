@@ -1,0 +1,13 @@
+contest 0.1.2 (test)
+dependencies 0.0.4
+faker 0.3.1
+haml 2.2.1
+monk 0.0.1
+ohm git://github.com/soveran/ohm.git
+override 0.0.9 (test) git://github.com/soveran/override.git
+quietbacktrace 0.1.1
+rack 1.0.0
+rack-test 0.3.0 (test)
+sinatra
+spawn 0.1.2
+webrat (test) git://github.com/djanowski/webrat.git
