@@ -1,4 +1,6 @@
-class Monk < Thor
+class MonkTasks < Thor
+  namespace :monk
+
   desc "test", "Run all the tests"
   def test
     $:.unshift File.join(File.dirname(__FILE__), "test")
