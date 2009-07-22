@@ -1,13 +1,13 @@
-contest 0.1.2 (test)
-dependencies 0.0.4
-faker 0.3.1
-haml 2.2.1
-monk 0.0.1
-ohm git://github.com/soveran/ohm.git
+contest 0.1.2 (test) git://github.com/citrusbyte/contest.git
+dependencies 0.0.4 git://github.com/djanowski/dependencies.git
+faker 0.3.1 git://github.com/yyyc514/faker.git
+haml 2.2.1 git://github.com/nex3/haml.git
+monk 0.0.1 git://github.com/monkrb/monk.git
+ohm 0.0.9 git://github.com/soveran/ohm.git
 override 0.0.9 (test) git://github.com/soveran/override.git
-quietbacktrace 0.1.1
-rack 1.0.0
-rack-test 0.3.0 (test)
-sinatra
-spawn 0.1.2
-webrat (test) git://github.com/djanowski/webrat.git
+quietbacktrace 0.1.1 git://github.com/thoughtbot/quietbacktrace.git
+rack 1.0.0 git://github.com/rack/rack.git
+rack-test 0.3.0 (test) git://github.com/brynary/rack-test.git
+sinatra 0.9.2 git://github.com/sinatra/sinatra.git
+spawn 0.1.2 git://github.com/soveran/spawn.git
+webrat 0.4.4.1 (test) git://github.com/djanowski/webrat.git
