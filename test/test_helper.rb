@@ -4,11 +4,6 @@ require File.expand_path(File.join(File.dirname(__FILE__), "..", "init"))
 
 require "rack/test"
 require "contest"
-
-# TODO: document.
-require "override"
-
-# TODO: document.
 require "override"
 require "quietbacktrace"
 
