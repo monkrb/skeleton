@@ -1,4 +1,4 @@
-class MonkTasks < Thor
+class Monk < Thor
   namespace :monk
 
   include Thor::Actions
