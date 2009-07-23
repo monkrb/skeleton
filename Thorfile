@@ -3,12 +3,10 @@ class MonkTasks < Thor
 
   include Thor::Actions
 
-  SETTINGS = "config/settings.yml"
-  SETTINGS_SAMPLE = "config/settings.example.yml"
-
   desc "test", "Run all the tests"
   def test
-    invoke :verify_settings
+    verify "config/settings.example.yml"
+    verify "config/redis/test.example.conf"
 
     $:.unshift File.join(File.dirname(__FILE__), "test")
 
@@ -17,24 +15,38 @@ class MonkTasks < Thor
     end
   end
 
-  desc "verify_settings", "Verify the existance of the settings file"
-  def verify_settings
-    return if File.exists?(SETTINGS)
-    say_status :missing, SETTINGS
-    create_settings
+  desc "start ENV", "Start Monk in the supplied environment"
+  def start(env = ENV["RACK_ENV"] || "development")
+    verify "config/settings.example.yml"
+    verify "config/redis/#{env}.example.conf"
+    exec "env RACK_ENV=#{env} ruby init.rb"
+  end
+
+  desc "copy_example EXAMPLE, TARGET", "Copies an example file to its destination"
+  def copy_example(example, target = target_file_for(example))
+    File.exists?(target) ? return : say_status(:missing, target)
+    File.exists?(example) ? confirm_copy_file(example, target) : say_status(:missing, example)
+  end
+
+  desc "verify EXAMPLE_FILE", "Verifies that the corresponding file exists for the supplied example file"
+  def verify(example)
+    copy_example(example) unless File.exists?(target_file_for(example))
   end
 
 private
+
 
   def self.source_root
     File.dirname(__FILE__)
   end
 
-  def create_settings
-    return unless File.exists?(SETTINGS_SAMPLE)
-
-    if yes?("Do you want to copy the file #{SETTINGS_SAMPLE} to #{SETTINGS}?")
-      copy_file SETTINGS_SAMPLE, SETTINGS
+  def confirm_copy_file(source, target)
+    if yes?("Do you want to copy the file #{source} to #{target}? [yn]")
+      copy_file(source, target)
     end
+  end
+
+  def target_file_for(example_file)
+    example_file.sub(".example", "")
   end
 end
