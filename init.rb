@@ -8,12 +8,12 @@ rescue LoadError
   require "dependencies"
 end
 
-require "monk"
+require "monk/glue"
 require "ohm"
 require "haml"
 require "sass"
 
-class Main < Monk
+class Main < Monk::Glue
   set :app_file, __FILE__
   use Rack::Session::Cookie
 end

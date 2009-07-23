@@ -1,8 +1,8 @@
+glue git://github.com/monkrb/glue.git
 contest 0.1.2 (test) git://github.com/citrusbyte/contest.git
 dependencies 0.0.5 git://github.com/djanowski/dependencies.git
 faker 0.3.1 git://github.com/yyyc514/faker.git
 haml 2.2.1 git://github.com/nex3/haml.git
-monk 0.0.2 git://github.com/monkrb/monk.git
 ohm 0.0.9 git://github.com/soveran/ohm.git
 override 0.0.9 (test) git://github.com/soveran/override.git
 quietbacktrace 0.1.1 git://github.com/thoughtbot/quietbacktrace.git
