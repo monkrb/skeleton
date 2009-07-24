@@ -7,7 +7,8 @@ class Monk::Glue::Reloader < Rack::Reloader
   end
 
   def safe_load(file, mtime, stderr = $stderr)
+    $LOADED_FEATURES.delete_if {|path| path =~ /^#{root_path}/ }
     Main.reset!
-    super(file, mtime, stderr)
+    super(Main.app_file, mtime, stderr)
   end
 end
