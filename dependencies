@@ -1,14 +1,14 @@
 contest 0.1.2 (test) git://github.com/citrusbyte/contest.git
-dependencies 0.0.5 git://github.com/djanowski/dependencies.git
+dependencies 0.0.6 git://github.com/djanowski/dependencies.git
 faker 0.3.1 git://github.com/yyyc514/faker.git
 haml 2.2.2 git://github.com/nex3/haml.git
 monk-glue git://github.com/monkrb/glue.git
-ohm 0.0.11 git://github.com/soveran/ohm.git
-override 0.0.9 (test) git://github.com/soveran/override.git
+ohm 0.0.15 git://github.com/soveran/ohm.git
+override 0.0.10 (test) git://github.com/soveran/override.git
 quietbacktrace 0.1.1 git://github.com/thoughtbot/quietbacktrace.git
 rack 1.0.0 git://github.com/rack/rack.git
 rack-test 0.3.0 (test) git://github.com/brynary/rack-test.git
-sinatra 0.9.2 git://github.com/sinatra/sinatra.git
+sinatra 0.9.4 git://github.com/sinatra/sinatra.git
 spawn 0.1.2 git://github.com/soveran/spawn.git
 stories 0.1.1 (test) git://github.com/citrusbyte/stories.git
 sr-webrat 0.4.4.1 (test) git://github.com/djanowski/webrat.git
