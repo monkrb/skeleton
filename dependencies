@@ -11,4 +11,4 @@ rack-test 0.3.0 (test) git://github.com/brynary/rack-test.git
 sinatra 0.9.4 git://github.com/sinatra/sinatra.git
 spawn 0.1.2 git://github.com/soveran/spawn.git
 stories 0.1.1 (test) git://github.com/citrusbyte/stories.git
-sr-webrat 0.4.4.1 (test) git://github.com/djanowski/webrat.git
+webrat 0.5 (test) git://github.com/brynary/webrat.git

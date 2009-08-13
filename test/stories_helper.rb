@@ -5,7 +5,7 @@ require "rack/test"
 require "stories"
 
 Webrat.configure do |config|
-  config.mode = :rack_test
+  config.mode = :rack
 end
 
 class Test::Unit::TestCase
