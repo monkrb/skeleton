@@ -1,28 +1,3 @@
-== 0.4.1 / 2009-08-06
-
-* Minor enhancements
-
-  * Support initializing a Rack::Test::Session with an app in addition to
-    a Rack::MockSession
-  * Allow CONTENT_TYPE to be specified in the env and not overwritten when
-    sending a POST or PUT
-
-== 0.4.0 / 2009-06-25
-
-* Minor enhancements
-
-  * Expose hook for building Rack::MockSessions for frameworks that need
-    to configure them before use
-  * Support passing in arrays of raw cookies in addition to a newline
-    separated string
-  * Support after_request callbacks in MockSession for things like running
-    background jobs
-  * Allow multiple named sessions using with_session
-  * Initialize Rack::Test::Sessions with Rack::MockSessions instead of apps.
-    This change should help integration with other Ruby web frameworks
-    (like Merb).
-  * Support sending bodies for PUT requests (Larry Diehl)
-
 == 0.3.0 / 2009-05-17
 
 * Major enhancements

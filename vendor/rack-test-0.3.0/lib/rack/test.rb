@@ -13,7 +13,8 @@ require "rack/test/uploaded_file"
 
 module Rack
   module Test
-    VERSION = ::File.read(::File.join(::File.dirname(__FILE__), "..", "..", "VERSION")).strip
+
+    VERSION = "0.3.0"
 
     DEFAULT_HOST = "example.org"
     MULTIPART_BOUNDARY = "----------XnJLe9ZIbbGUYtzPQJ16u1"
@@ -28,16 +29,10 @@ module Rack
       def_delegators :@rack_mock_session, :clear_cookies, :set_cookie, :last_response, :last_request
 
       # Initialize a new session for the given Rack app
-      def initialize(mock_session)
+      def initialize(app, default_host = DEFAULT_HOST)
         @headers = {}
-
-        if mock_session.is_a?(MockSession)
-          @rack_mock_session = mock_session
-        else
-          @rack_mock_session = MockSession.new(mock_session)
-        end
-
-        @default_host = @rack_mock_session.default_host
+        @default_host = default_host
+        @rack_mock_session = Rack::MockSession.new(app, default_host)
       end
 
       # Issue a GET request for the given URI with the given params and Rack
@@ -152,9 +147,8 @@ module Rack
         env.update("HTTPS" => "on")                if URI::HTTPS === uri
         env["X-Requested-With"] = "XMLHttpRequest" if env[:xhr]
 
-        if (env[:method] == "POST" || env["REQUEST_METHOD"] == "POST" ||
-            env[:method] == "PUT" || env["REQUEST_METHOD"] == "PUT") && !env.has_key?(:input)
-          env["CONTENT_TYPE"] ||= "application/x-www-form-urlencoded"
+        if (env[:method] == "POST" || env["REQUEST_METHOD"] == "POST") && !env.has_key?(:input)
+          env["CONTENT_TYPE"] = "application/x-www-form-urlencoded"
 
           multipart = (Hash === env[:params]) &&
             env[:params].any? { |_, v| UploadedFile === v }

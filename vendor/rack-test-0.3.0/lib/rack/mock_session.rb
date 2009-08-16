@@ -3,16 +3,10 @@ module Rack
   class MockSession
     attr_writer :cookie_jar
     attr_reader :last_response
-    attr_reader :default_host
 
     def initialize(app, default_host = Rack::Test::DEFAULT_HOST)
       @app = app
-      @after_request = []
       @default_host = default_host
-    end
-
-    def after_request(&block)
-      @after_request << block
     end
 
     def clear_cookies
@@ -30,7 +24,6 @@ module Rack
       @last_response = MockResponse.new(status, headers, body, env["rack.errors"].flush)
       cookie_jar.merge(last_response.headers["Set-Cookie"], uri)
 
-      @after_request.each { |hook| hook.call }
       @last_response
     end
 
