@@ -1,17 +1,45 @@
-require "rack/reloader"
-
-# TODO Add documentation.
-class Monk::Glue::Reloader < Rack::Reloader
-  def initialize(app, cooldown = 0, backend = Stat)
-    super(app, cooldown, backend)
+class Monk::Glue::Reloader
+  def initialize(app, app_class = Main)
+    @app = app
+    @app_class = app_class
+    @last = last_mtime
   end
 
-  def safe_load(file, mtime, stderr = $stderr)
-    $LOADED_FEATURES.delete(root_path("init.rb"))
-    $LOADED_FEATURES.delete_if {|path| path =~ /^#{root_path("app")}/ }
+  def call(env)
+    current = last_mtime
 
-    Main.reset!
+    if current > @last
+      if Thread.list.size > 1
+        Thread.exclusive { reload! }
+      else
+        reload!
+      end
 
-    super(Main.app_file, mtime, stderr)
+      @last = current
+    end
+
+    @app.call(env)
+  end
+
+  def reload!
+    files.each do |file|
+      $LOADED_FEATURES.delete(file)
+    end
+
+    @app_class.reset!
+
+    require @app_class.app_file
+  end
+
+  # Returns the timestamp for the most recently modified app file.
+  def last_mtime
+    files.map do |file|
+      ::File.stat(file).mtime
+    end.max
+  end
+
+  # Returns the list of application files.
+  def files
+    Dir[root_path("app", "**", "*.rb")] + [@app_class.app_file]
   end
 end
