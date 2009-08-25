@@ -2,39 +2,37 @@
 
 require 'test/unit/ui/console/testrunner'
 
-$stories = []
+module Stories
+  def self.all
+    @all ||= {}
+  end
 
-class Test::Unit::TestCase
-  class << self
-    alias original_story story
-    alias original_scenario scenario
+  module TestCase
+    def self.included(base)
+      class << base
+        def story(name, *args, &block)
+          context(name, *args) do
+            Stories.all[self] = Stories::Story.new(name)
+            class_eval(&block) if block_given?
+          end
+        end
 
-    def story(name, &block)
-      story = Stories::Story.new(name)
+        def scenario(name, *args, &block)
+          scenario = Stories::Scenario.new(name)
 
-      original_story(name) do
-        @@story = story
+          Stories.all[self].scenarios << scenario
 
-        def self.story; @@story; end
-
-        class_eval(&block) if block_given?
+          test(name) do
+            @scenario = scenario
+            instance_eval(&block)
+          end
+        end
       end
-
-      $stories << story
-    end
-
-    def scenario(name, &block)
-      scenario = Stories::Scenario.new(name)
-
-      original_scenario(name) do
-        @scenario = scenario
-        instance_eval(&block)
-      end
-
-      self.story.scenarios << scenario
     end
   end
 end
+
+Test::Unit::TestCase.send(:include, Stories::TestCase)
 
 module Test::Unit::Assertions
   def report(text, &block)
@@ -86,7 +84,7 @@ module Stories
     def finished(elapsed_time)
       puts
 
-      $stories.each_with_index do |story,i|
+      Stories.all.values.to_a.each_with_index do |story,i|
         puts "- #{story.name}"
 
         story.scenarios.each do |scenario|
@@ -105,11 +103,11 @@ module Stories
           end
         end
 
-        puts unless i + 1 == $stories.size
+        puts unless i + 1 == Stories.all.values.size
       end
 
       super
-      puts "%d stories, %d scenarios" % [$stories.size, $stories.inject(0) {|total,s| total + s.scenarios.size }]
+      puts "%d stories, %d scenarios" % [Stories.all.values.size, Stories.all.values.inject(0) {|total,s| total + s.scenarios.size }]
     end
   end
 

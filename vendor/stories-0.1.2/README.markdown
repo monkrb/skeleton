@@ -50,7 +50,7 @@ If you are using Rails, you can use stories for your integration tests with Webr
 
 This will produce the following output:
 
-    - As a user I want to lo in so that I can access restricted features
+    - As a user I want to log in so that I can access restricted features
         Using good information
             Go to “/”
             Click “Log in”

@@ -2,7 +2,7 @@ require "rubygems"
 require "contest"
 
 unless defined?(Test::Unit::AutoRunner)
-  gem "test-unit", ">= 1.2"
+  gem "test-unit", "1.2.3"
 end
 
 class Test::Unit::TestCase

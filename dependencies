@@ -1,5 +1,5 @@
 contest 0.1.2 (test) git://github.com/citrusbyte/contest.git
-dependencies 0.0.7 git://github.com/djanowski/dependencies.git
+dependencies git://github.com/djanowski/dependencies.git
 faker 0.3.1 git://github.com/yyyc514/faker.git
 haml 2.2.3 git://github.com/nex3/haml.git
 monk-glue git://github.com/monkrb/glue.git
@@ -10,5 +10,5 @@ rack 1.0.0 git://github.com/rack/rack.git
 rack-test 0.3.0 (test) git://github.com/brynary/rack-test.git
 sinatra 0.9.4 git://github.com/sinatra/sinatra.git
 spawn 0.1.2 git://github.com/soveran/spawn.git
-stories 0.1.1 (test) git://github.com/citrusbyte/stories.git
+stories 0.1.2 (test) git://github.com/citrusbyte/stories.git
 webrat 0.5.1 (test) git://github.com/brynary/webrat.git

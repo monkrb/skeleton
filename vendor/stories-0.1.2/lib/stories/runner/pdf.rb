@@ -18,7 +18,7 @@ module Stories
         
         pdf.move_down(15)
 
-        $stories.each do |story|
+        Stories.all.values.each do |story|
           pdf.text story.name, :style => :bold
 
           story.scenarios.each_with_index do |scenario,i|
