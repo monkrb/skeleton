@@ -16,7 +16,7 @@ class Monk < Thor
   end
 
   desc "stories", "Run user stories."
-  method_option :pdf => :boolean
+  method_option :pdf, :type => :boolean
   def stories
     $:.unshift(Dir.pwd, "test")
 
