@@ -12,4 +12,5 @@ end
 class Test::Unit::TestCase
   include Webrat::Methods
   include Webrat::Matchers
+  include Stories::Webrat
 end
