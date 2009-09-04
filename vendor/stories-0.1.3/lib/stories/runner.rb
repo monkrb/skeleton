@@ -115,7 +115,7 @@ module Stories
     def report_for(action, &block)
       define_method(action) do |*args|
         @scenario.steps << block.call(*args)
-        super
+        super(*args)
       end
     end
 
