@@ -1,6 +1,4 @@
 class Monk < Thor
-  namespace :monk
-
   include Thor::Actions
 
   desc "test", "Run all tests"
