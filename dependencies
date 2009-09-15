@@ -3,7 +3,7 @@ dependencies git://github.com/djanowski/dependencies.git
 faker 0.3.1 git://github.com/yyyc514/faker.git
 haml 2.2.3 git://github.com/nex3/haml.git
 monk-glue git://github.com/monkrb/glue.git
-ohm 0.0.18 git://github.com/soveran/ohm.git
+ohm 0.0.19 git://github.com/soveran/ohm.git
 override 0.0.10 (test) git://github.com/soveran/override.git
 quietbacktrace 0.1.1 git://github.com/thoughtbot/quietbacktrace.git
 rack 1.0.0 git://github.com/rack/rack.git
