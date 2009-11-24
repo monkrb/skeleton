@@ -7,8 +7,8 @@ choice.
 Description
 -----------
 
-Spawn is a very small library (just 14 lines of code) that can
-effectively replace fixtures or any other huge library for the same task.
+Spawn is a very small library that can effectively replace fixtures or
+any other huge library for the same task.
 
 Usage
 -----
@@ -16,7 +16,7 @@ Usage
 In the examples below we are using [Faker](http://faker.rubyforge.org/)
 to generate random data, but you can use any method.
 
-With ActiveRecord:
+With [ActiveRecord](http://api.rubyonrails.org/classes/ActiveRecord/Base.html):
 
     class User < ActiveRecord::Base
       spawner do |user|
@@ -25,10 +25,24 @@ With ActiveRecord:
       end
     end
 
-With Sequel:
+With [Sequel](http://sequel.rubyforge.org/):
 
     class User < Sequel::Model
       extend Spawn
+
+      spawner do |user|
+        user.name = Faker::Name.name
+        user.email = Faker::Internet.email
+      end
+    end
+
+With [Ohm](http://ohm.keyvalue.org):
+
+    class User < Ohm::Model
+      extend Spawn
+
+      attribute :name
+      attribute :email
 
       spawner do |user|
         user.name = Faker::Name.name
@@ -51,6 +65,15 @@ Then, in your test or in any other place:
 Or, if you need something special:
 
     @user = User.spawn :name => "Michel Martens"
+
+This sends to User.new all the attributes defined in the spawner block, along with
+the hash of attributes passed when spawning.
+
+If you want a reference to the model before the validity is checked, you can pass
+a block:
+
+    @user = User.spawn { |u| u.name = "Michel Martens" }
+
 
 Conditional evaluation
 ----------------------

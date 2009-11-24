@@ -22,13 +22,13 @@ class ValidationsTest < Test::Unit::TestCase
     context "That must have a present name" do
       should "not be created if the name is never assigned" do
         @event.create
-        assert_nil @event.id
+        assert @event.new?
       end
 
       should "not be created if the name assigned is empty" do
         @event.name = ""
         @event.create
-        assert_nil @event.id
+        assert @event.new?
       end
 
       should "be created if the name assigned is not empty" do
@@ -41,7 +41,7 @@ class ValidationsTest < Test::Unit::TestCase
         should "not be created if the name doesn't match /^\w+$/" do
           @event.name = "hello-world"
           @event.create
-          assert_nil @event.id
+          assert @event.new?
         end
       end
     end
@@ -56,7 +56,7 @@ class ValidationsTest < Test::Unit::TestCase
         @event.place = "bar"
         @event.create
 
-        assert_nil @event.id
+        assert @event.new?
         assert_equal [[:capacity, :not_numeric]], @event.errors
       end
 
@@ -70,7 +70,7 @@ class ValidationsTest < Test::Unit::TestCase
         @event.capacity = "baz"
         @event.create
 
-        assert_nil @event.id
+        assert @event.new?
         assert_equal [[:capacity, :not_numeric]], @event.errors
       end
 
@@ -98,7 +98,7 @@ class ValidationsTest < Test::Unit::TestCase
         @event.name = "foo"
         @event.create
 
-        assert_nil @event.id
+        assert @event.new?
         assert_equal [[:name, :not_unique]], @event.errors
       end
     end
@@ -114,13 +114,25 @@ class ValidationsTest < Test::Unit::TestCase
         @event.place = "bar"
         @event.create
 
-        assert_nil @event.id
+        assert @event.new?
         assert_equal [[[:name, :place], :not_unique]], @event.errors
 
         @event.place = "baz"
         @event.create
 
         assert @event.valid?
+      end
+    end
+
+    context "That defines a unique validation on a non indexed attribute" do
+      should "raise ArgumentError" do
+        def @event.validate
+          assert_unique :capacity
+        end
+
+        assert_raises(Ohm::Model::IndexNotFound) do
+          @event.valid?
+        end
       end
     end
   end

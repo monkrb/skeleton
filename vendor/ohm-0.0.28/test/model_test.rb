@@ -1,8 +1,12 @@
+# encoding: UTF-8
+
 require File.join(File.dirname(__FILE__), "test_helper")
+require "ostruct"
 
 class Post < Ohm::Model
   attribute :body
   list :comments
+  list :related, Post
 end
 
 class User < Ohm::Model
@@ -12,9 +16,14 @@ end
 
 class Person < Ohm::Model
   attribute :name
+  index :initial
 
   def validate
     assert_present :name
+  end
+
+  def initial
+    name[0, 1].upcase
   end
 end
 
@@ -22,6 +31,13 @@ class Event < Ohm::Model
   attribute :name
   counter :votes
   set :attendees, Person
+
+  attribute :slug
+
+  def write
+    self.slug = name.to_s.downcase
+    super
+  end
 end
 
 class TestRedis < Test::Unit::TestCase
@@ -34,9 +50,13 @@ class TestRedis < Test::Unit::TestCase
 
   context "An event created from a hash of attributes" do
     should "assign an id and save the object" do
+      Ohm.flush
+
       event1 = Event.create(:name => "Ruby Tuesday")
       event2 = Event.create(:name => "Ruby Meetup")
-      assert_equal event1.id + 1, event2.id
+
+      assert_equal "1", event1.id
+      assert_equal "2", event2.id
     end
 
     should "return the unsaved object if validation fails" do
@@ -45,9 +65,9 @@ class TestRedis < Test::Unit::TestCase
   end
 
   context "An event updated from a hash of attributes" do
-
     class Meetup < Ohm::Model
       attribute :name
+      attribute :location
 
       def validate
         assert_present :name
@@ -64,11 +84,23 @@ class TestRedis < Test::Unit::TestCase
       event = Meetup.create(:name => "Ruby Tuesday")
       assert !event.update(:name => nil)
     end
+
+    should "save the attributes in UTF8" do
+     event = Meetup.create(:name => "32° Kisei-sen")
+     assert_equal "32° Kisei-sen", Meetup[event.id].name
+    end
+
+    should "delete the attribute if set to nil" do
+      event = Meetup.create(:name => "Ruby Tuesday", :location => "Los Angeles")
+      assert_equal "Los Angeles", Meetup[event.id].location
+      assert event.update(:location => nil)
+      assert_equal nil, Meetup[event.id].location
+    end
   end
 
   context "Finding an event" do
     setup do
-      Ohm.redis.sadd("Event", 1)
+      Ohm.redis.sadd("Event:all", 1)
       Ohm.redis.set("Event:1:name", "Concert")
     end
 
@@ -89,6 +121,10 @@ class TestRedis < Test::Unit::TestCase
       assert User[1].kind_of?(User)
       assert_equal 1, User[1].id
       assert_equal "albert@example.com", User[1].email
+    end
+
+    should "allow to map ids to models" do
+      assert_equal [User[1]], [1].map(&User)
     end
   end
 
@@ -118,19 +154,24 @@ class TestRedis < Test::Unit::TestCase
 
   context "Creating a new model" do
     should "assign a new id to the event" do
+      Ohm.flush
+
       event1 = Event.new
       event1.create
 
       event2 = Event.new
       event2.create
 
-      assert event1.id
-      assert_equal event1.id + 1, event2.id
+      assert !event1.new?
+      assert !event2.new?
+
+      assert_equal "1", event1.id
+      assert_equal "2", event2.id
     end
   end
 
   context "Saving a model" do
-    should "create the model if it's new" do
+    should "create the model if it is new" do
       event = Event.new(:name => "Foo").save
       assert_equal "Foo", Event[event.id].name
     end
@@ -144,6 +185,12 @@ class TestRedis < Test::Unit::TestCase
       event.save
 
       assert_equal "Lorem", Event[event.id].name
+    end
+
+    should "allow to hook into write" do
+      event = Event.create(:name => "Foo")
+
+      assert_equal "foo", event.slug
     end
   end
 
@@ -227,12 +274,14 @@ class TestRedis < Test::Unit::TestCase
       Person.create :name => "B"
       Person.create :name => "A"
 
-      assert_equal "A", Person.all.sort_by(:name, get: "Person:*:name", order: "ALPHA").first
+      assert_equal "A", Person.all.sort_by(:name, :get => "Person:*:name", :order => "ALPHA").first
     end
   end
 
   context "Loading attributes" do
     setup do
+      Ohm.flush
+
       event = Event.new
       event.name = "Ruby Tuesday"
       @id = event.create.id
@@ -259,7 +308,7 @@ class TestRedis < Test::Unit::TestCase
     end
 
     should "not be available if the model is new" do
-      assert_raise Ohm::Model::ModelIsNew do
+      assert_raise Ohm::Model::MissingID do
         @event.attendees << 1
       end
     end
@@ -305,6 +354,34 @@ class TestRedis < Test::Unit::TestCase
       @event.attendees << "2"
       @event.attendees << "3"
       assert_equal 3, @event.attendees.size
+    end
+
+    should "empty the set" do
+      @event.create
+      @event.attendees << "1"
+
+      @event.attendees.clear
+
+      assert @event.attendees.empty?
+    end
+
+    should "replace the values in the set" do
+      @event.create
+      @event.attendees << "1"
+
+      @event.attendees.replace(["2", "3"])
+
+      assert_equal ["2", "3"], @event.attendees.raw.sort
+    end
+
+    should "filter elements" do
+      @event.create
+      @event.attendees.add(Person.create(:name => "Albert"))
+      @event.attendees.add(Person.create(:name => "Marie"))
+
+      assert_equal ["1"], @event.attendees.find(:initial => "A").raw
+      assert_equal ["2"], @event.attendees.find(:initial => "M").raw
+      assert_equal [],    @event.attendees.find(:initial => "Z").raw
     end
   end
 
@@ -375,6 +452,34 @@ class TestRedis < Test::Unit::TestCase
       assert_equal "1", @post.comments.pop
       assert_equal "2", @post.comments.pop
       assert @post.comments.empty?
+    end
+
+    should "empty the list" do
+      @post.comments.unshift "1"
+      @post.comments.clear
+
+      assert @post.comments.empty?
+    end
+
+    should "replace the values in the list" do
+      @post.comments.replace(["1", "2"])
+
+      assert_equal ["1", "2"], @post.comments.raw
+    end
+
+    should "add models" do
+      @post.related.add(Post.create(:body => "Hello"))
+
+      assert_equal ["2"], @post.related.raw
+    end
+
+    should "find elements in the list" do
+      another_post = Post.create
+
+      @post.related.add(another_post)
+
+      assert  @post.related.include?(another_post.id)
+      assert !@post.related.include?("-1")
     end
   end
 
@@ -488,6 +593,37 @@ class TestRedis < Test::Unit::TestCase
 
     should "not be comparable to instances of other models" do
       assert_not_equal @user, Event.create(:name => "Ruby Tuesday")
+    end
+
+    should "be comparable to non-models" do
+      assert_not_equal @user, 1
+      assert_not_equal @user, true
+
+      # Not equal although the other object responds to #key.
+      assert_not_equal @user, OpenStruct.new(:key => @user.send(:key))
+    end
+  end
+
+  context "Debugging" do
+    class ::Bar < Ohm::Model
+      attribute :name
+      counter :visits
+      set :friends
+      list :comments
+    end
+
+    should "provide a meaningful inspect" do
+      bar = Bar.new
+
+      assert_equal "#<Bar:? name=nil friends=nil comments=nil visits=0>", bar.inspect
+
+      bar.update(:name => "Albert")
+      bar.friends << 1
+      bar.friends << 2
+      bar.comments << "A"
+      bar.incr(:visits)
+
+      assert_equal %Q{#<Bar:#{bar.id} name="Albert" friends=#<Set: ["1", "2"]> comments=#<List: ["A"]> visits=1>}, Bar[bar.id].inspect
     end
   end
 end

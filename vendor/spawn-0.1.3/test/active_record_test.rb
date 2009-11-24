@@ -18,25 +18,24 @@ class ActiveRecordUser < ActiveRecord::Base
   validates_presence_of :name
 
   spawner do |user|
-    user.name = Faker::Name.name
     user.email = Faker::Internet.email
   end
 end
 
 class TestSpawnWithActiveRecord < Test::Unit::TestCase
-  setup do
-    @user = ActiveRecordUser.spawn :name => "John"
-  end
-
   context "spawned user" do
+    setup do
+      @user = ActiveRecordUser.spawn :name => "John"
+    end
+
     should "have John as name" do
       assert_equal "John", @user.name
     end
 
     context "with invalid attributes" do
       should "raise an error" do
-        assert_raise ActiveRecord::RecordInvalid do
-          ActiveRecordUser.spawn :name => nil
+        assert_raise Spawn::Invalid do
+          ActiveRecordUser.spawn
         end
       end
     end

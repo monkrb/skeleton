@@ -12,6 +12,12 @@ Ohm is a library for storing objects in
 database. It includes an extensible list of validations and has very
 good performance.
 
+Community
+---------
+
+Join the mailing list: [http://groups.google.com/group/ohm-ruby](http://groups.google.com/group/ohm-ruby)
+
+Meet us on IRC: [#ohm](irc://chat.freenode.net/#ohm) on [freenode.net](http://freenode.net/)
 
 Getting started
 ---------------
@@ -157,10 +163,34 @@ An index is a set that's handled automatically by Ohm. For any index declared,
 Ohm maintains different sets of objects ids for quick lookups.
 
 For example, in the example above, the index on the name attribute will
-allow for searches like Event.find(:name, "some value").
+allow for searches like Event.find(name: "some value").
 
-Note that the `find` method and the `assert_unique` validation need a
-corresponding index to exist.
+Note that the `assert_unique` validation and the methods `find` and `except` need a
+corresponding index in order to work.
+
+### Finding
+
+You can find a collection of records with the `find` method:
+
+    # This returns a collection of users with the username "Albert"
+    User.find(username: "Albert")
+
+### Filtering results
+
+    # Find all users from Argentina
+    User.find(country: "Argentina")
+
+    # Find all activated users from Argentina
+    User.find(country: "Argentina", status: "activated")
+
+    # Find all users from Argentina, except those with a suspended account.
+    User.find(country: "Argentina").except(status: "suspended")
+
+Note that calling these methods results in new sets being created
+on the fly. This is important so that you can perform further operations
+before reading the items to the client.
+
+For more information, see [SINTERSTORE](http://code.google.com/p/redis/wiki/SinterstoreCommand) and [SDIFFSTORE](http://code.google.com/p/redis/wiki/SdiffstoreCommand).
 
 Validations
 -----------
@@ -237,12 +267,7 @@ Given the following example:
 If all the assertions fail, the following errors will be present:
 
     obj.errors
-    # => [[:foo, :not_present], [:bar, :not_numeric], [:baz, :format], [[:qux], :not_unique]]
-
-Note that the error for assert_unique wraps the field in an array.
-The purpose for this is to standardize the format for both single and
-multicolumn indexes.
-
+    # => [[:foo, :not_present], [:bar, :not_numeric], [:baz, :format], [:qux, :not_unique]]
 
 Presenting errors
 -----------------

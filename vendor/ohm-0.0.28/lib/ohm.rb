@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 require "base64"
 require File.join(File.dirname(__FILE__), "ohm", "redis")
 require File.join(File.dirname(__FILE__), "ohm", "validations")
@@ -72,11 +74,14 @@ module Ohm
       # @option options [#to_s] :order (ASC) Sorting order, which can be ASC or DESC.
       # @option options [Integer] :limit (all) Number of items to return.
       # @option options [Integer] :start (0) An offset from where the limit will be applied.
+      #
       # @example Get the first ten users sorted alphabetically by name:
-      #   @event.attendees.sort(User, :by => :name, :order => "ALPHA", :limit => 10)
+      #
+      #   @event.attendees.sort(:by => :name, :order => "ALPHA", :limit => 10)
       #
       # @example Get five posts sorted by number of votes and starting from the number 5 (zero based):
-      #   @blog.posts.sort(Post, :by => :votes, :start => 5, :limit => 10")
+      #
+      #   @blog.posts.sort(:by => :votes, :start => 5, :limit => 10")
       def sort(options = {})
         return [] if empty?
         options[:start] ||= 0
@@ -92,8 +97,9 @@ module Ohm
       #   User.create :name => "B"
       #   User.create :name => "A"
       #
-      #   user = User.all.sort_by :name, :order => "ALPHA"
-      #   user.name == "A" #=> true
+      #   user = User.all.sort_by(:name, :order => "ALPHA").first
+      #   user.name == "A"
+      #   # => true
       def sort_by(att, options = {})
         sort(options.merge(:by => model.key("*", att)))
       end
@@ -124,6 +130,29 @@ module Ohm
       # @return [true, false] Returns whether or not the collection is empty.
       def empty?
         size.zero?
+      end
+
+      # Clears the values in the collection.
+      def clear
+        db.del(key)
+        self
+      end
+
+      # Appends the given values to the collection.
+      def concat(values)
+        values.each { |value| self << value }
+        self
+      end
+
+      # Replaces the collection with the passed values.
+      def replace(values)
+        clear
+        concat(values)
+      end
+
+      # @param value [Ohm::Model#id] Adds the id of the object if it's an Ohm::Model.
+      def add(model)
+        self << model.id
       end
 
     private
@@ -177,6 +206,14 @@ module Ohm
       def size
         db.llen(key)
       end
+
+      def include?(value)
+        raw.include?(value)
+      end
+
+      def inspect
+        "#<List: #{raw.inspect}>"
+      end
     end
 
     # Represents a Redis set.
@@ -200,13 +237,6 @@ module Ohm
         db.sadd(key, value)
       end
 
-      # @param value [Ohm::Model#id] Adds the id of the object if it's an Ohm::Model.
-      def add model
-        raise ArgumentError unless model.kind_of?(Ohm::Model)
-        raise ArgumentError unless model.id
-        self << model.id
-      end
-
       def delete(value)
         db.srem(key, value)
       end
@@ -224,58 +254,62 @@ module Ohm
         db.scard(key)
       end
 
+      def inspect
+        "#<Set: #{raw.inspect}>"
+      end
+
       # Returns an intersection with the sets generated from the passed hash.
       #
-      # @see Ohm::Model.filter
-      # @yield [results] Results of the filtering. Beware that the set of results is deleted from Redis when the block ends.
+      # @see Ohm::Model.find
       # @example
-      #   Event.search(day: "2009-09-11") do |search_results|
-      #     events = search_results.all
-      #   end
-      def filter(hash, &block)
-        apply(:sinterstore, keys(hash).push(key), &block)
-      end
-
-      # Returns a union with the sets generated from the passed hash.
+      #   @events = Event.find(public: true)
       #
-      # @see Ohm::Model.search
-      # @yield [results] Results of the search. Beware that the set of results is deleted from Redis when the block ends.
+      #   # You can combine the result with sort and other set operations:
+      #   @events.sort_by(:name)
+      def find(hash)
+        apply(:sinterstore, hash, "+")
+      end
+
+      # Returns the difference between the receiver and the passed sets.
+      #
       # @example
-      #   Event.search(day: "2009-09-11") do |search_results|
-      #     search_results.filter(public: true) do |filter_results|
-      #       events = filter_results.all
-      #     end
-      #   end
-      def search(hash, &block)
-        apply(:sunionstore, keys(hash), &block)
-      end
-
-      def delete!
-        db.del(key)
-      end
-
-      # Apply a redis operation on a collection of sets. Note that
-      # the resulting set is removed inmediatly after use.
-      def apply(operation, source, &block)
-        target = source.join(operation)
-        db.send(operation, target, *source)
-        set = self.class.new(db, target, model)
-        block.call(set)
-        set.delete!
+      #   @events = Event.find(public: true).except(status: "sold_out")
+      def except(hash)
+        apply(:sdiffstore, hash, "-")
       end
 
     private
+
+      # Apply a redis operation on a collection of sets.
+      def apply(operation, hash, glue)
+        indices = keys(hash).unshift(key).uniq
+        target = indices.join(glue)
+        db.send(operation, target, *indices)
+        self.class.new(db, target, model)
+      end
 
       # Transform a hash of attribute/values into an array of keys.
       def keys(hash)
         hash.inject([]) do |acc, t|
           acc + Array(t[1]).map do |v|
-            model.key(t[0], model.encode(v))
+            model.index_key_for(t[0], v)
           end
         end
       end
     end
+
+    class Index < Set
+      def inspect
+        "#<Index: #{raw.inspect}>"
+      end
+
+      def clear
+        raise Ohm::Model::CannotDeleteIndex
+      end
+    end
   end
+
+  Error = Class.new(StandardError)
 
   class Model
     module Validations
@@ -290,20 +324,44 @@ module Ohm
       #   Validates that the :street and :city pair is unique.
       def assert_unique(attrs)
         result = db.sinter(*Array(attrs).map { |att| index_key_for(att, send(att)) })
-        assert(result.empty? || result.include?(id.to_s), [attrs, :not_unique])
+        assert result.empty? || !new? && result.include?(id.to_s), [attrs, :not_unique]
       end
     end
 
     include Validations
 
-    ModelIsNew = Class.new(StandardError)
+    class MissingID < Error
+      def message
+        "You tried to perform an operation that needs the model ID, but it's not present."
+      end
+    end
+
+    class CannotDeleteIndex < Error
+      def message
+        "You tried to delete an internal index used by Ohm."
+      end
+    end
+
+    class IndexNotFound < Error
+      def initialize(att)
+        @att = att
+      end
+
+      def message
+        "Index #{@att.inspect} not found."
+      end
+    end
 
     @@attributes = Hash.new { |hash, key| hash[key] = [] }
     @@collections = Hash.new { |hash, key| hash[key] = [] }
     @@counters = Hash.new { |hash, key| hash[key] = [] }
     @@indices = Hash.new { |hash, key| hash[key] = [] }
 
-    attr_accessor :id
+    attr_writer :id
+
+    def id
+      @id or raise MissingID
+    end
 
     # Defines a string attribute for the model. This attribute will be persisted by Redis
     # as a string. Any value stored here will be retrieved in its string representation.
@@ -364,7 +422,7 @@ module Ohm
     #   end
     #
     #   # Now this is possible:
-    #   User.find :email, "ohm@example.com"
+    #   User.find email: "ohm@example.com"
     #
     # @param name [Symbol] Name of the attribute to be indexed.
     def self.index(att)
@@ -389,8 +447,12 @@ module Ohm
       new(:id => id) if exists?(id)
     end
 
+    def self.to_proc
+      Proc.new { |id| self[id] }
+    end
+
     def self.all
-      @all ||= Attributes::Set.new(db, key(:all), self)
+      @all ||= Attributes::Index.new(db, key(:all), self)
     end
 
     def self.attributes
@@ -415,38 +477,16 @@ module Ohm
       model
     end
 
-    # Find all the records matching the specified attribute-value pair.
-    #
-    # @example
-    #   Event.find(:starts_on, Date.today)
-    def self.find(attrs, value)
-      Attributes::Set.new(db, key(attrs, encode(value)), self)
-    end
-
     # Search across multiple indices and return the intersection of the sets.
     #
     # @example Finds all the user events for the supplied days
     #   event1 = Event.create day: "2009-09-09", author: "Albert"
     #   event2 = Event.create day: "2009-09-09", author: "Benoit"
     #   event3 = Event.create day: "2009-09-10", author: "Albert"
-    #   Event.filter(author: "Albert", day: "2009-09-09") do |events|
-    #     assert_equal [event1], events
-    #   end
-    def self.filter(hash, &block)
-      self.all.filter(hash, &block)
-    end
-
-    # Search across multiple indices and return the union of the sets.
     #
-    # @example Finds all the events for the supplied days
-    #   event1 = Event.create day: "2009-09-09"
-    #   event2 = Event.create day: "2009-09-10"
-    #   event3 = Event.create day: "2009-09-11"
-    #   Event.search(day: ["2009-09-09", "2009-09-10", "2009-09-011"]) do |events|
-    #     assert_equal [event1, event2, event3], events
-    #   end
-    def self.search(hash, &block)
-      self.all.search(hash, &block)
+    #   assert_equal [event1], Event.find(author: "Albert", day: "2009-09-09")
+    def self.find(hash)
+      all.find(hash)
     end
 
     def self.encode(value)
@@ -454,12 +494,12 @@ module Ohm
     end
 
     def initialize(attrs = {})
-      @_attributes = Hash.new {|hash,key| hash[key] = read_remote(key) }
+      @_attributes = Hash.new { |hash, key| hash[key] = read_remote(key) }
       update_attributes(attrs)
     end
 
     def new?
-      !id
+      !@id
     end
 
     def create
@@ -468,8 +508,8 @@ module Ohm
 
       mutex do
         create_model_membership
+        write
         add_to_indices
-        save!
       end
     end
 
@@ -478,8 +518,8 @@ module Ohm
       return unless valid?
 
       mutex do
+        write
         update_indices
-        save!
       end
     end
 
@@ -503,19 +543,19 @@ module Ohm
       self
     end
 
-    # Increment the attribute denoted by :att.
+    # Increment the counter denoted by :att.
     #
     # @param att [Symbol] Attribute to increment.
     def incr(att)
-      raise ArgumentError unless counters.include?(att)
+      raise ArgumentError, "#{att.inspect} is not a counter." unless counters.include?(att)
       write_local(att, db.incr(key(att)))
     end
 
-    # Decrement the attribute denoted by :att.
+    # Decrement the counter denoted by :att.
     #
     # @param att [Symbol] Attribute to decrement.
     def decr(att)
-      raise ArgumentError unless counters.include?(att)
+      raise ArgumentError, "#{att.inspect} is not a counter." unless counters.include?(att)
       write_local(att, db.decr(key(att)))
     end
 
@@ -536,8 +576,8 @@ module Ohm
     end
 
     def ==(other)
-      other.key == key
-    rescue ModelIsNew
+      other.kind_of?(self.class) && other.key == key
+    rescue MissingID
       false
     end
 
@@ -549,11 +589,33 @@ module Ohm
       self
     end
 
+    def inspect
+      everything = (attributes + collections + counters).map do |att|
+        value = begin
+                  send(att)
+                rescue MissingID
+                  nil
+                end
+
+        [att, value.inspect]
+      end
+
+      "#<#{self.class}:#{new? ? "?" : id} #{everything.map {|e| e.join("=") }.join(" ")}>"
+    end
+
   protected
 
     def key(*args)
-      raise ModelIsNew if new?
       self.class.key(id, *args)
+    end
+
+    def write
+      unless attributes.empty?
+        rems, adds = attributes.map { |a| [key(a), send(a)] }.partition { |t| t.last.nil? }
+
+        db.del(*rems.flatten.compact) unless rems.empty?
+        db.mset(adds.flatten)         unless adds.empty?
+      end
     end
 
   private
@@ -571,7 +633,7 @@ module Ohm
     end
 
     def initialize_id
-      self.id = db.incr(self.class.key("id"))
+      self.id = db.incr(self.class.key("id")).to_s
     end
 
     def db
@@ -590,11 +652,6 @@ module Ohm
 
     def delete_model_membership
       db.srem(self.class.key(:all), id)
-    end
-
-    def save!
-      attributes.each { |att| write_remote(att, send(att)) }
-      self
     end
 
     def update_indices
@@ -639,11 +696,7 @@ module Ohm
     end
 
     def read_remote(att)
-      id && db.get(key(att))
-    end
-
-    def write_remote(att, value)
-      db.set(key(att), value)
+      db.get(key(att)) unless new?
     end
 
     def read_locals(attrs)
@@ -658,8 +711,13 @@ module Ohm
       end
     end
 
+    def self.index_key_for(att, value)
+      raise IndexNotFound, att unless indices.include?(att)
+      key(att, encode(value))
+    end
+
     def index_key_for(att, value)
-      self.class.key(att, self.class.encode(value))
+      self.class.index_key_for(att, value)
     end
 
     # Lock the object so no other instances can modify it.
