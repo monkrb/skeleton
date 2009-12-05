@@ -3,6 +3,7 @@
 require "base64"
 require File.join(File.dirname(__FILE__), "ohm", "redis")
 require File.join(File.dirname(__FILE__), "ohm", "validations")
+require File.join(File.dirname(__FILE__), "ohm", "compat-1.8.6")
 
 module Ohm
 
@@ -352,6 +353,16 @@ module Ohm
       end
     end
 
+    class RedefinitionError < Error
+      def initialize(att)
+        @att = att
+      end
+
+      def message
+        "Cannot redefine #{@att.inspect}"
+      end
+    end
+
     @@attributes = Hash.new { |hash, key| hash[key] = [] }
     @@collections = Hash.new { |hash, key| hash[key] = [] }
     @@counters = Hash.new { |hash, key| hash[key] = [] }
@@ -368,6 +379,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the attribute.
     def self.attribute(name)
+      raise RedefinitionError, name if attributes.include?(name)
+
       define_method(name) do
         read_local(name)
       end
@@ -384,6 +397,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the counter.
     def self.counter(name)
+      raise RedefinitionError, name if counters.include?(name)
+
       define_method(name) do
         read_local(name).to_i
       end
@@ -396,6 +411,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the list.
     def self.list(name, model = nil)
+      raise RedefinitionError, name if collections.include?(name)
+
       attr_list_reader(name, model)
       collections << name
     end
@@ -406,6 +423,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the set.
     def self.set(name, model = nil)
+      raise RedefinitionError, name if collections.include?(name)
+
       attr_set_reader(name, model)
       collections << name
     end
@@ -426,6 +445,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the attribute to be indexed.
     def self.index(att)
+      raise RedefinitionError, att if indices.include?(att)
+
       indices << att
     end
 
@@ -609,10 +630,29 @@ module Ohm
       self.class.key(id, *args)
     end
 
+    # Use MSET if possible, SET otherwise.
     def write
+      db.support_mset? ?
+        write_with_mset :
+        write_with_set
+    end
+
+    # Write attributes using SET
+    # This method will be removed once MSET becomes standard.
+    def write_with_set
+      attributes.each do |att|
+        (value = send(att)) ?
+          db.set(key(att), value) :
+          db.del(key(att))
+      end
+    end
+
+    # Write attributes using MSET
+    # This is the preferred method, and will be the only option
+    # available once MSET becomes standard.
+    def write_with_mset
       unless attributes.empty?
         rems, adds = attributes.map { |a| [key(a), send(a)] }.partition { |t| t.last.nil? }
-
         db.del(*rems.flatten.compact) unless rems.empty?
         db.mset(adds.flatten)         unless adds.empty?
       end
