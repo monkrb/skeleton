@@ -26,4 +26,8 @@ Dir[root_path("app/**/*.rb")].each do |file|
   require file
 end
 
+if defined? Encoding
+  Encoding.default_external = Encoding::UTF_8
+end
+
 Main.run! if Main.run?
