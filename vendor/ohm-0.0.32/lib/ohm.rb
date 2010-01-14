@@ -183,6 +183,8 @@ module Ohm
         db.rpush(key, value)
       end
 
+      alias push <<
+
       # @return [String] Return and remove the last element of the list.
       def pop
         db.rpop(key)
@@ -353,16 +355,6 @@ module Ohm
       end
     end
 
-    class RedefinitionError < Error
-      def initialize(att)
-        @att = att
-      end
-
-      def message
-        "Cannot redefine #{@att.inspect}"
-      end
-    end
-
     @@attributes = Hash.new { |hash, key| hash[key] = [] }
     @@collections = Hash.new { |hash, key| hash[key] = [] }
     @@counters = Hash.new { |hash, key| hash[key] = [] }
@@ -379,8 +371,6 @@ module Ohm
     #
     # @param name [Symbol] Name of the attribute.
     def self.attribute(name)
-      raise RedefinitionError, name if attributes.include?(name)
-
       define_method(name) do
         read_local(name)
       end
@@ -389,7 +379,7 @@ module Ohm
         write_local(name, value)
       end
 
-      attributes << name
+      attributes << name unless attributes.include?(name)
     end
 
     # Defines a counter attribute for the model. This attribute can't be assigned, only incremented
@@ -397,13 +387,11 @@ module Ohm
     #
     # @param name [Symbol] Name of the counter.
     def self.counter(name)
-      raise RedefinitionError, name if counters.include?(name)
-
       define_method(name) do
         read_local(name).to_i
       end
 
-      counters << name
+      counters << name unless counters.include?(name)
     end
 
     # Defines a list attribute for the model. It can be accessed only after the model instance
@@ -411,10 +399,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the list.
     def self.list(name, model = nil)
-      raise RedefinitionError, name if collections.include?(name)
-
       attr_list_reader(name, model)
-      collections << name
+      collections << name unless collections.include?(name)
     end
 
     # Defines a set attribute for the model. It can be accessed only after the model instance
@@ -423,10 +409,8 @@ module Ohm
     #
     # @param name [Symbol] Name of the set.
     def self.set(name, model = nil)
-      raise RedefinitionError, name if collections.include?(name)
-
       attr_set_reader(name, model)
-      collections << name
+      collections << name unless collections.include?(name)
     end
 
     # Creates an index (a set) that will be used for finding instances.
@@ -445,9 +429,7 @@ module Ohm
     #
     # @param name [Symbol] Name of the attribute to be indexed.
     def self.index(att)
-      raise RedefinitionError, att if indices.include?(att)
-
-      indices << att
+      indices << att unless indices.include?(att)
     end
 
     def self.attr_list_reader(name, model = nil)
@@ -602,7 +584,7 @@ module Ohm
       false
     end
 
-    # Lock the object before ejecuting the block, and release it once the block is done.
+    # Lock the object before executing the block, and release it once the block is done.
     def mutex
       lock!
       yield
@@ -761,15 +743,32 @@ module Ohm
     end
 
     # Lock the object so no other instances can modify it.
+    # This method implements the design pattern for locks
+    # described at: http://code.google.com/p/redis/wiki/SetnxCommand
+    #
     # @see Model#mutex
     def lock!
-      lock = db.setnx(key(:_lock), 1) until lock == 1
+      until db.setnx(key(:_lock), lock_timeout)
+        next unless lock = db.get(key(:_lock))
+        sleep(0.5) and next unless lock_expired?(lock)
+
+        break unless lock = db.getset(key(:_lock), lock_timeout)
+        break if lock_expired?(lock)
+      end
     end
 
     # Release the lock.
     # @see Model#mutex
     def unlock!
       db.del(key(:_lock))
+    end
+
+    def lock_timeout
+      Time.now.to_f + 1
+    end
+
+    def lock_expired? lock
+      lock.to_f < Time.now.to_f
     end
   end
 end

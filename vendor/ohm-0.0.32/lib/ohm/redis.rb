@@ -7,19 +7,19 @@
 # http://github.com/ezmobius/redis-rb/
 require 'socket'
 
-begin
-  if (RUBY_VERSION >= '1.9')
-    require 'timeout'
-    RedisTimer = Timeout
-  else
-    require 'system_timer'
-    RedisTimer = SystemTimer
-  end
-rescue LoadError
-  RedisTimer = nil
-end
-
 module Ohm
+  begin
+    if (RUBY_VERSION >= '1.9')
+      require 'timeout'
+      RedisTimer = Timeout
+    else
+      require 'system_timer'
+      RedisTimer = SystemTimer
+    end
+  rescue LoadError
+    RedisTimer = nil
+  end
+
   class Redis
     class ProtocolError < RuntimeError
       def initialize(reply_type)
@@ -42,6 +42,7 @@ module Ohm
       :smove => true,
       :srem => true,
       :zadd => true,
+      :zincrby => true,
       :zrem => true,
       :zscore => true
     }
@@ -136,13 +137,13 @@ module Ohm
       # socket instead will be supported anyway.
       if @timeout != 0 and RedisTimer
         begin
-          @sock = TCPSocket.new(host, port, 0)
+          @sock = TCPSocket.new(host, port)
         rescue Timeout::Error
           @sock = nil
           raise Timeout::Error, "Timeout connecting to the server"
         end
       else
-        @sock = TCPSocket.new(host, port, 0)
+        @sock = TCPSocket.new(host, port)
       end
 
       @sock.setsockopt Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1
@@ -184,7 +185,7 @@ module Ohm
     def call_command(argv)
       connect unless connected?
       raw_call_command(argv.dup)
-    rescue Errno::ECONNRESET, Errno::EPIPE
+    rescue Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED
       if reconnect
         raw_call_command(argv.dup)
       else
