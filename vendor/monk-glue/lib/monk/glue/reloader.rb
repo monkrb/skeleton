@@ -28,7 +28,7 @@ class Monk::Glue::Reloader
 
     @app_class.reset!
 
-    require @app_class.app_file
+    require File.expand_path(@app_class.app_file)
   end
 
   # Returns the timestamp for the most recently modified app file.
