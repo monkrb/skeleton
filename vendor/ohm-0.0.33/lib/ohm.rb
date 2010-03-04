@@ -4,16 +4,22 @@ require "base64"
 require File.join(File.dirname(__FILE__), "ohm", "redis")
 require File.join(File.dirname(__FILE__), "ohm", "validations")
 require File.join(File.dirname(__FILE__), "ohm", "compat-1.8.6")
+require File.join(File.dirname(__FILE__), "ohm", "key")
+require File.join(File.dirname(__FILE__), "ohm", "collection")
 
 module Ohm
 
   # Provides access to the Redis database. This is shared accross all models and instances.
   def redis
-    Thread.current[:redis] ||= Ohm::Redis.new(*options)
+    threaded[:redis] ||= connection(*options)
   end
 
   def redis=(connection)
-    Thread.current[:redis] = connection
+    threaded[:redis] = connection
+  end
+
+  def threaded
+    Thread.current[:ohm] ||= {}
   end
 
   # Connect to a redis database.
@@ -30,8 +36,15 @@ module Ohm
     @options = options
   end
 
+  # Return a connection to Redis.
+  #
+  # This is a wapper around Ohm::Redis.new(options)
+  def connection(*options)
+    Ohm::Redis.new(*options)
+  end
+
   def options
-    @options
+    @options || []
   end
 
   # Clear the database.
@@ -41,54 +54,55 @@ module Ohm
 
   # Join the parameters with ":" to create a key.
   def key(*args)
-    args.join(":")
+    Key[*args]
   end
 
-  module_function :key, :connect, :flush, :redis, :redis=, :options
+  module_function :key, :connect, :connection, :flush, :redis, :redis=, :options, :threaded
 
-  module Attributes
+  Error = Class.new(StandardError)
+
+  class Model
     class Collection
       include Enumerable
 
-      attr_accessor :key, :db, :model
+      attr :raw
+      attr :model
 
-      def initialize(db, key, model = nil)
-        self.db = db
-        self.key = key
-        self.model = model
+      def initialize(key, model, db = model.db)
+        @raw = self.class::Raw.new(key, db)
+        @model = model
       end
+
+      def <<(model)
+        raw << model.id
+      end
+
+      alias add <<
 
       def each(&block)
-        all.each(&block)
+        raw.each do |id|
+          block.call(model[id])
+        end
       end
 
-      # Return instances of model for all the ids contained in the collection.
-      def all
-        instantiate(raw)
+      def key
+        raw.key
       end
 
-      # Return the values as model instances, ordered by the options supplied.
-      # Check redis documentation to see what values you can provide to each option.
-      #
-      # @param options [Hash] options to sort the collection.
-      # @option options [#to_s] :by Model attribute to sort the instances by.
-      # @option options [#to_s] :order (ASC) Sorting order, which can be ASC or DESC.
-      # @option options [Integer] :limit (all) Number of items to return.
-      # @option options [Integer] :start (0) An offset from where the limit will be applied.
-      #
-      # @example Get the first ten users sorted alphabetically by name:
-      #
-      #   @event.attendees.sort(:by => :name, :order => "ALPHA", :limit => 10)
-      #
-      # @example Get five posts sorted by number of votes and starting from the number 5 (zero based):
-      #
-      #   @blog.posts.sort(:by => :votes, :start => 5, :limit => 10")
-      def sort(options = {})
-        return [] if empty?
-        options[:start] ||= 0
-        options[:limit] = [options[:start], options[:limit]] if options[:limit]
-        result = db.sort(key, options)
-        options[:get] ? result : instantiate(result)
+      def first(options = {})
+        if options[:by]
+          sort_by(options.delete(:by), options.merge(:limit => 1)).first
+        else
+          model[raw.first(options)]
+        end
+      end
+
+      def [](index)
+        model[raw[index]]
+      end
+
+      def sort(*args)
+        raw.sort(*args).map(&model)
       end
 
       # Sort the model instances by the given attribute.
@@ -102,163 +116,58 @@ module Ohm
       #   user.name == "A"
       #   # => true
       def sort_by(att, options = {})
-        sort(options.merge(:by => model.key("*", att)))
+        options.merge!(:by => model.key("*", att))
+
+        if options[:get]
+          raw.sort(options.merge(:get => model.key("*", options[:get])))
+        else
+          sort(options)
+        end
       end
 
-      # Sort the model instances by id and return the first instance
-      # found. If a :by option is provided with a valid attribute name, the
-      # method sort_by is used instead and the option provided is passed as the
-      # first parameter.
-      #
-      # @see #sort
-      # @see #sort_by
-      # @return [Ohm::Model, nil] Returns the first instance found or nil.
-      def first(options = {})
-        options = options.merge(:limit => 1)
-        options[:by] ?
-          sort_by(options.delete(:by), options).first :
-          sort(options).first
+      def delete(model)
+        raw.delete(model.id)
+        model
       end
 
-      def to_ary
-        all
-      end
-
-      def ==(other)
-        to_ary == other
-      end
-
-      # @return [true, false] Returns whether or not the collection is empty.
-      def empty?
-        size.zero?
-      end
-
-      # Clears the values in the collection.
       def clear
-        db.del(key)
+        raw.clear
+      end
+
+      def concat(models)
+        raw.concat(models.map { |model| model.id })
         self
       end
 
-      # Appends the given values to the collection.
-      def concat(values)
-        values.each { |value| self << value }
+      def replace(models)
+        raw.replace(models.map { |model| model.id })
         self
       end
 
-      # Replaces the collection with the passed values.
-      def replace(values)
-        clear
-        concat(values)
+      def include?(model)
+        raw.include?(model.id)
       end
 
-      # @param value [Ohm::Model#id] Adds the id of the object if it's an Ohm::Model.
-      def add(model)
-        self << model.id
+      def empty?
+        raw.empty?
       end
 
-    private
-
-      def instantiate(raw)
-        model ? raw.collect { |id| model[id] } : raw
-      end
-    end
-
-    # Represents a Redis list.
-    #
-    # @example Use a list attribute.
-    #
-    #   class Event < Ohm::Model
-    #     attribute :name
-    #     list :participants
-    #   end
-    #
-    #   event = Event.create :name => "Redis Meeting"
-    #   event.participants << "Albert"
-    #   event.participants << "Benoit"
-    #   event.participants.all #=> ["Albert", "Benoit"]
-    class List < Collection
-
-      # @param value [#to_s] Pushes value to the tail of the list.
-      def << value
-        db.rpush(key, value)
-      end
-
-      alias push <<
-
-      # @return [String] Return and remove the last element of the list.
-      def pop
-        db.rpop(key)
-      end
-
-      # @return [String] Return and remove the first element of the list.
-      def shift
-        db.lpop(key)
-      end
-
-      # @param value [#to_s] Pushes value to the head of the list.
-      def unshift(value)
-        db.lpush(key, value)
-      end
-
-      # @return [Array] Elements of the list.
-      def raw
-        db.list(key)
-      end
-
-      # @return [Integer] Returns the number of elements in the list.
       def size
-        db.llen(key)
+        raw.size
       end
 
-      def include?(value)
-        raw.include?(value)
+      def all
+        raw.to_a.map(&model)
       end
 
-      def inspect
-        "#<List: #{raw.inspect}>"
-      end
+      alias to_a all
     end
 
-    # Represents a Redis set.
-    #
-    # @example Use a set attribute.
-    #
-    #   class Company < Ohm::Model
-    #     attribute :name
-    #     set :employees
-    #   end
-    #
-    #   company = Company.create :name => "Redis Co."
-    #   company.employees << "Albert"
-    #   company.employees << "Benoit"
-    #   company.employees.all       #=> ["Albert", "Benoit"]
-    #   company.include?("Albert")  #=> true
     class Set < Collection
-
-      # @param value [#to_s] Adds value to the list.
-      def << value
-        db.sadd(key, value)
-      end
-
-      def delete(value)
-        db.srem(key, value)
-      end
-
-      def include?(value)
-        db.sismember(key, value)
-      end
-
-      def raw
-        db.smembers(key)
-      end
-
-      # @return [Integer] Returns the number of elements in the set.
-      def size
-        db.scard(key)
-      end
+      Raw = Ohm::Set
 
       def inspect
-        "#<Set: #{raw.inspect}>"
+        "#<Set (#{model}): #{all.inspect}>"
       end
 
       # Returns an intersection with the sets generated from the passed hash.
@@ -285,36 +194,42 @@ module Ohm
 
       # Apply a redis operation on a collection of sets.
       def apply(operation, hash, glue)
-        indices = keys(hash).unshift(key).uniq
-        target = indices.join(glue)
-        db.send(operation, target, *indices)
-        self.class.new(db, target, model)
+        target = key.volatile.group(glue).append(*keys(hash))
+        model.db.send(operation, target, *target.parts)
+        Set.new(target, model)
       end
 
       # Transform a hash of attribute/values into an array of keys.
       def keys(hash)
-        hash.inject([]) do |acc, t|
-          acc + Array(t[1]).map do |v|
-            model.index_key_for(t[0], v)
+        [].tap do |keys|
+          hash.each do |key, values|
+            values = [values] unless values.kind_of?(Array) # Yes, Array() is different in 1.8.x.
+            values.each do |v|
+              keys << model.index_key_for(key, v)
+            end
           end
         end
       end
     end
 
-    class Index < Set
-      def inspect
-        "#<Index: #{raw.inspect}>"
-      end
+    class List < Collection
+      Raw = Ohm::List
 
-      def clear
-        raise Ohm::Model::CannotDeleteIndex
+      def inspect
+        "#<List (#{model}): #{all.inspect}>"
       end
     end
-  end
 
-  Error = Class.new(StandardError)
+    class Index < Set
+      def apply(operation, hash, glue)
+        if hash.keys.size == 1
+          return Set.new(keys(hash).first, model)
+        else
+          super
+        end
+      end
+    end
 
-  class Model
     module Validations
       include Ohm::Validations
 
@@ -336,12 +251,6 @@ module Ohm
     class MissingID < Error
       def message
         "You tried to perform an operation that needs the model ID, but it's not present."
-      end
-    end
-
-    class CannotDeleteIndex < Error
-      def message
-        "You tried to delete an internal index used by Ohm."
       end
     end
 
@@ -399,7 +308,7 @@ module Ohm
     #
     # @param name [Symbol] Name of the list.
     def self.list(name, model = nil)
-      attr_list_reader(name, model)
+      attr_collection_reader(name, :List, model)
       collections << name unless collections.include?(name)
     end
 
@@ -409,7 +318,7 @@ module Ohm
     #
     # @param name [Symbol] Name of the set.
     def self.set(name, model = nil)
-      attr_set_reader(name, model)
+      attr_collection_reader(name, :Set, model)
       collections << name unless collections.include?(name)
     end
 
@@ -432,17 +341,118 @@ module Ohm
       indices << att unless indices.include?(att)
     end
 
-    def self.attr_list_reader(name, model = nil)
-      define_method(name) do
-        instance_variable_get("@#{name}") ||
-          instance_variable_set("@#{name}", Attributes::List.new(db, key(name), model))
+    # Define a reference to another object.
+    #
+    # @example
+    #   class Comment < Ohm::Model
+    #     attribute :content
+    #     reference :post, Post
+    #   end
+    #
+    #   @post = Post.create :content => "Interesting stuff"
+    #
+    #   @comment = Comment.create(:content => "Indeed!", :post => @post)
+    #
+    #   @comment.post.content
+    #   # => "Interesting stuff"
+    #
+    #   @comment.post = Post.create(:content => "Wonderful stuff")
+    #
+    #   @comment.post.content
+    #   # => "Wonderful stuff"
+    #
+    #   @comment.post.update(:content => "Magnific stuff")
+    #
+    #   @comment.post.content
+    #   # => "Magnific stuff"
+    #
+    #   @comment.post = nil
+    #
+    #   @comment.post
+    #   # => nil
+    #
+    # @see Ohm::Model::collection
+    def self.reference(name, model)
+      reader = :"#{name}_id"
+      writer = :"#{name}_id="
+
+      attribute reader
+      index reader
+
+      define_memoized_method(name) do
+        model[send(reader)]
+      end
+
+      define_method(:"#{name}=") do |value|
+        instance_variable_set("@#{name}", nil)
+        send(writer, value ? value.id : nil)
+      end
+
+      define_method(writer) do |value|
+        instance_variable_set("@#{name}", nil)
+        write_local(reader, value)
       end
     end
 
-    def self.attr_set_reader(name, model)
+    # Define a collection of objects which have a {Ohm::Model::reference reference}
+    # to this model.
+    #
+    #   class Comment < Ohm::Model
+    #     attribute :content
+    #     reference :post, Post
+    #   end
+    #
+    #   class Post < Ohm::Model
+    #     attribute  :content
+    #     collection :comments, Comment
+    #     reference  :author, Person
+    #   end
+    #
+    #   class Person < Ohm::Model
+    #     attribute  :name
+    #
+    #     # When the name of the reference cannot be inferred,
+    #     # you need to specify it in the third param.
+    #     collection :posts, Post, :author
+    #   end
+    #
+    #   @person = Person.create :name => "Albert"
+    #   @post = Post.create :content => "Interesting stuff", :author => @person
+    #   @comment = Comment.create :content => "Indeed!", :post => @post
+    #
+    #   @post.comments.first.content
+    #   # => "Indeed!"
+    #
+    #   @post.author.name
+    #   # => "Albert"
+    #
+    # *Important*: please note that even though a collection is a {Ohm::Set Set},
+    # you should not add or remove objects from this collection directly.
+    #
+    # @see Ohm::Model::reference
+    # @param name      [Symbol]   Name of the collection.
+    # @param model     [Constant] Model where the reference is defined.
+    # @param reference [Symbol]   Reference as defined in the associated model.
+    def self.collection(name, model, reference = to_reference)
+      define_method(name) { model.find(:"#{reference}_id" => send(:id)) }
+    end
+
+    def self.to_reference
+      name.to_s.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase.to_sym
+    end
+
+    def self.attr_collection_reader(name, type, model)
+      if model
+        define_memoized_method(name) { Ohm::Model::const_get(type).new(key(name), model, db) }
+      else
+        define_memoized_method(name) { Ohm::const_get(type).new(key(name), db) }
+      end
+    end
+
+    def self.define_memoized_method(name, &block)
       define_method(name) do
         instance_variable_get("@#{name}") ||
-          instance_variable_set("@#{name}", Attributes::Set.new(db, key(name), model))
+          instance_variable_set("@#{name}", instance_eval(&block))
       end
     end
 
@@ -455,7 +465,7 @@ module Ohm
     end
 
     def self.all
-      @all ||= Attributes::Index.new(db, key(:all), self)
+      @all ||= Ohm::Model::Index.new(key(:all), self)
     end
 
     def self.attributes
@@ -588,8 +598,9 @@ module Ohm
     def mutex
       lock!
       yield
-      unlock!
       self
+    ensure
+      unlock!
     end
 
     def inspect
@@ -604,6 +615,25 @@ module Ohm
       end
 
       "#<#{self.class}:#{new? ? "?" : id} #{everything.map {|e| e.join("=") }.join(" ")}>"
+    end
+
+    # Makes the model connect to a different Redis instance.
+    #
+    # @example
+    #
+    #   class Post < Ohm::Model
+    #     connect :port => 6380, :db => 2
+    #
+    #     attribute :body
+    #   end
+    #
+    #   # Since these settings are usually environment-specific,
+    #   # you may want to call this method from outside of the class
+    #   # definition:
+    #   Post.connect(:port => 6380, :db => 2)
+    #
+    def self.connect(*options)
+      self.db = Ohm.connection(*options)
     end
 
   protected
@@ -623,7 +653,8 @@ module Ohm
     # This method will be removed once MSET becomes standard.
     def write_with_set
       attributes.each do |att|
-        (value = send(att)) ?
+        value = send(att)
+        value.to_s.empty? ?
           db.set(key(att), value) :
           db.del(key(att))
       end
@@ -634,7 +665,7 @@ module Ohm
     # available once MSET becomes standard.
     def write_with_mset
       unless attributes.empty?
-        rems, adds = attributes.map { |a| [key(a), send(a)] }.partition { |t| t.last.nil? }
+        rems, adds = attributes.map { |a| [key(a), send(a)] }.partition { |t| t.last.to_s.empty? }
         db.del(*rems.flatten.compact) unless rems.empty?
         db.mset(adds.flatten)         unless adds.empty?
       end
@@ -642,8 +673,13 @@ module Ohm
 
   private
 
+    # Provides access to the Redis database. This is shared accross all models and instances.
     def self.db
-      Ohm.redis
+      Ohm.threaded[self] || Ohm.redis
+    end
+
+    def self.db=(connection)
+      Ohm.threaded[self] = connection
     end
 
     def self.key(*args)
@@ -659,7 +695,7 @@ module Ohm
     end
 
     def db
-      Ohm.redis
+      self.class.db
     end
 
     def delete_attributes(atts)

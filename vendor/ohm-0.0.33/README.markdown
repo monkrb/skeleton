@@ -3,7 +3,6 @@ Ohm ॐ
 
 Object-hash mapping library for Redis.
 
-
 Description
 -----------
 
@@ -47,7 +46,6 @@ Now, in an irb session you can test the Redis adapter directly:
     >> Ohm.redis.get "Foo"
     => "Bar"
 
-
 Models
 ------
 
@@ -59,8 +57,8 @@ the example below:
 
     class Event < Ohm::Model
       attribute :name
-      set :participants
-      list :comments
+      reference :venue, Venue
+      set :participants, Person
       counter :votes
 
       index :name
@@ -70,9 +68,18 @@ the example below:
       end
     end
 
+    class Venue < Ohm::Model
+      attribute :name
+      collection :events, Event
+    end
+
+    class Person < Ohm::Model
+      attribute :name
+    end
+
 All models have the `id` attribute built in, you don't need to declare it.
 
-This is how you interact with ids:
+This is how you interact with IDs:
 
     event = Event.create :name => "Ohm Worldwide Conference 2031"
     event.id
@@ -92,13 +99,16 @@ validations. Keep reading to find out what you can do with models.
 Attribute types
 ---------------
 
-Ohm::Model provides four attribute types: `attribute`, `set`, `list` and
-`counter`.
+Ohm::Model provides four attribute types: {Ohm::Model::attribute
+attribute}, {Ohm::Model::set set}, {Ohm::Model::list list}
+and {Ohm::Model::counter counter}; and two meta types:
+{Ohm::Model::reference reference} and {Ohm::Model::collection
+collection}.
 
 ### attribute
 
 An `attribute` is just any value that can be stored as a string. In the
-example above, we used this field to store the Event's `name`. You can
+example above, we used this field to store the event's `name`. You can
 use it to store numbers, but be aware that Redis will return a string
 when you retrieve the value.
 
@@ -121,6 +131,17 @@ of the value is not allowed. You can retrieve, increase or decrease
 the value, but you can not assign it. In the example above, we used a
 counter attribute for tracking votes. As the incr and decr operations
 are atomic, you can rest assured a vote won't be counted twice.
+
+### reference
+
+It's a special kind of attribute that references another model.
+Internally, Ohm will keep a pointer to the model (its ID), but you get
+accessors that give you real instances. You can think of it as the model
+containing the foreign key to another model.
+
+### collection
+
+Provides an accessor to search for all models that `reference` the current model.
 
 Persistence strategy
 --------------------
@@ -150,54 +171,69 @@ If you are saving the object, this will suffice:
       event.comments << "Wonderful event!"
     end
 
+Working with Sets
+-----------------
 
-Associations
-------------
+Given the following model declaration:
 
-Ohm lets you use collections (lists and sets) to represent associations.
-For this, you only need to provide a second parameter when declaring a
-list or a set:
+    class Event < Ohm::Model
+      attribute :name
+      set :attendees, Person
+    end
 
-    set :attendees, Person
+You can add instances of `Person` to the set of attendees with the
+`<<` method:
 
-After this, every time you refer to `event.attendees` you will be talking
-about instances of the model `Person`. If you want to get the raw values
-of the set, you can use `event.attendees.raw`.
-
-The `attendees` collection also exposes two sorting methods: `sort`
-returns the elements ordered by `id`, and `sort_by` receives a parameter
-with an attribute name, which will determine the sorting order. Both
-methods receive an options hash which is explained in the documentation
-for {Ohm::Attributes::Collection#sort}.
-
-Adding instances of `Person` to the attendees hash is done with the
-`add` method:
-
-    @event.attendees.add(Person.create(name: "Albert"))
+    @event.attendees << Person.create(name: "Albert")
 
     # And now...
     @event.attendees.each do |person|
       # ...do what you want with this person.
     end
 
-Just to clarify: when you add items to a set with `<<`, Ohm inserts
-whatever you send without checking it. When you use `add`, it assumes
-it's an instance of some `Ohm::Model` and stores its id.
+Sorting
+-------
 
+Since `attendees` is a {Ohm::Model::Set Set}, it exposes two sorting
+methods: {Ohm::Model::Collection#sort sort} returns the elements
+ordered by `id`, and {Ohm::Model::Collection#sort_by sort_by} receives
+a parameter with an attribute name, which will determine the sorting
+order. Both methods receive an options hash which is explained in the
+documentation for {Ohm::Model::Collection#sort sort}.
+
+Associations
+------------
+
+Ohm lets you declare `references` and `collections` to represent associations.
+
+    class Post < Ohm::Model
+      attribute :title
+      attribute :body
+      collection :comments, Comment
+    end
+
+    class Comment < Ohm::Model
+      attribute :body
+      reference :post, Post
+    end
+
+After this, every time you refer to `post.comments` you will be talking
+about instances of the model `Comment`. If you want to get a list of IDs
+you can use `post.comments.raw`.
 
 Indexes
 -------
 
 An index is a set that's handled automatically by Ohm. For any index declared,
-Ohm maintains different sets of objects ids for quick lookups.
+Ohm maintains different sets of objects IDs for quick lookups.
 
-For example, in the example above, the index on the name attribute will
-allow for searches like Event.find(name: "some value").
+In the `Event` example, the index on the name attribute will
+allow for searches like `Event.find(name: "some value")`.
 
 Note that the `assert_unique` validation and the methods `find` and `except` need a
 corresponding index in order to work.
 
-### Finding
+### Finding records
 
 You can find a collection of records with the `find` method:
 
@@ -229,7 +265,6 @@ definition you can use assertions that will determine if the attributes
 are valid. Nesting assertions is a good practice, and you are also
 encouraged to create your own assertions. You can trigger validations at
 any point by calling `valid?` on a model instance.
-
 
 Assertions
 -----------

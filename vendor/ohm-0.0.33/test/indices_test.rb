@@ -33,13 +33,29 @@ class IndicesTest < Test::Unit::TestCase
 
   context "A model with an indexed attribute" do
     setup do
-      @user1 = User.create(:email => "foo")
+      @user1 = User.create(:email => "foo", :activation_code => "bar")
       @user2 = User.create(:email => "bar")
       @user3 = User.create(:email => "baz qux")
     end
 
     should "be able to find by the given attribute" do
       assert_equal @user1, User.find(:email => "foo").first
+    end
+
+    should "avoid intersections with the all collection" do
+      assert_equal "IndicesTest::User:email:#{Ohm::Model.encode "foo"}", User.find(:email => "foo").key.to_s
+
+      assert_equal "~:IndicesTest::User:email:Zm9v+IndicesTest::User:activation_code:",
+        User.find(:email => "foo").find(:activation_code => "").key.to_s
+
+      assert_equal "~:IndicesTest::User:email:Zm9v+IndicesTest::User:activation_code:+IndicesTest::User:working_days:",
+        User.find(:email => "foo").find(:activation_code => "").find(:working_days => "").key.to_s
+    end
+
+    should "use a special namespace for set operations" do
+      assert_match /^~:/, User.find(:email => "foo", :activation_code => "bar").key.to_s
+
+      assert Ohm.redis.keys("~:*").size > 0
     end
 
     should "raise if the field is not indexed" do
@@ -57,28 +73,18 @@ class IndicesTest < Test::Unit::TestCase
       @user1.email = "baz"
       @user1.save
 
-      assert_equal [], User.find(:email => "foo")
-      assert_equal [@user1], User.find(:email => "baz")
+      assert_equal [], User.find(:email => "foo").all
+      assert_equal [@user1], User.find(:email => "baz").all
     end
 
     should "remove from the index after deleting" do
       @user2.delete
 
-      assert_equal [], User.find(:email => "bar")
+      assert_equal [], User.find(:email => "bar").all
     end
 
     should "work with attributes that contain spaces" do
-      assert_equal [@user3], User.find(:email => "baz qux")
-    end
-
-    should "not allow to manually clear an index" do
-      assert_raise Ohm::Model::CannotDeleteIndex do
-        User.find(:email => "bar").clear
-      end
-
-      assert_raise Ohm::Model::CannotDeleteIndex do
-        User.find(:email => "bar").find(:email => "baz").clear
-      end
+      assert_equal [@user3], User.find(:email => "baz qux").all
     end
   end
 
@@ -91,7 +97,7 @@ class IndicesTest < Test::Unit::TestCase
 
     should "allow indexing by an arbitrary attribute" do
       assert_equal [@user1, @user2], User.find(:email_provider => "gmail.com").to_a.sort_by { |u| u.id }
-      assert_equal [@user3], User.find(:email_provider => "yahoo.com")
+      assert_equal [@user3], User.find(:email_provider => "yahoo.com").all
     end
 
     should "allow indexing by an attribute that is lazily set" do
@@ -122,7 +128,7 @@ class IndicesTest < Test::Unit::TestCase
     should "remove the indices when the object changes" do
       @user2.working_days.delete "Mon"
       @user2.save
-      assert_equal [@user1], User.find(:working_days => "Mon")
+      assert_equal [@user1], User.find(:working_days => "Mon").all
     end
   end
 
@@ -146,12 +152,12 @@ class IndicesTest < Test::Unit::TestCase
     end
 
     should "intersect multiple sets of results" do
-      assert_equal [@event1], Event.find(:timeline => 1, :days => [1, 2])
-      assert_equal [@event1], Event.find(:timeline => 1).find(:days => [1, 2])
+      assert_equal [@event1], Event.find(:timeline => 1, :days => [1, 2]).all
+      assert_equal [@event1], Event.find(:timeline => 1).find(:days => [1, 2]).all
     end
 
     should "compute the difference between sets" do
-      assert_equal [@event2], Event.find(:timeline => 1).except(:days => 1)
+      assert_equal [@event2], Event.find(:timeline => 1).except(:days => 1).all
     end
 
     should "raise if the argument is not an index" do
@@ -162,7 +168,7 @@ class IndicesTest < Test::Unit::TestCase
 
     should "work with strings that generate a new line when encoded" do
       user = User.create(:email => "foo@bar", :update => "CORRECTED - UPDATE 2-Suspected US missile strike kills 5 in Pakistan")
-      assert_equal [user], User.find(:update => "CORRECTED - UPDATE 2-Suspected US missile strike kills 5 in Pakistan")
+      assert_equal [user], User.find(:update => "CORRECTED - UPDATE 2-Suspected US missile strike kills 5 in Pakistan").all
     end
   end
 
