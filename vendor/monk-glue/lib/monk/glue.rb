@@ -12,8 +12,6 @@ def root_path(*args)
 end
 
 require "sinatra/base"
-require "haml"
-require "sass"
 
 Monk = Module.new unless defined? Monk
 
@@ -40,19 +38,6 @@ class Monk::Glue < Sinatra::Base
     begin
       require "ruby-debug"
     rescue LoadError
-    end
-  end
-
-  helpers do
-    # TODO Add documentation.
-    def haml(template, options = {}, locals = {})
-      options[:escape_html] = true unless options.include?(:escape_html)
-      super(template, options, locals)
-    end
-
-    # TODO Add documentation.
-    def partial(template, locals = {})
-      haml(template, {:layout => false}, locals)
     end
   end
 end
