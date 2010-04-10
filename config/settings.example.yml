@@ -1,7 +1,8 @@
 defaults: &defaults
   :log_level: warn
   :redis:
-    :port: 6379
+    :host: localhost
+    :port: 6380
 
 :development:
   <<: *defaults
@@ -10,7 +11,9 @@ defaults: &defaults
 :test:
   <<: *defaults
   :redis:
-    :port: 6380
+    :host: localhost
+    :port: 6379
+    :db: 15
 
 :production:
   <<: *defaults
