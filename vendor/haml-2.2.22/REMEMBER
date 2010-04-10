@@ -1,0 +1,6 @@
+Deprecate .foo& in stable
+Make .#{} work in extend
+Test newly-invalid selectors, including post-resolution parse errors in Sass
+Be smart about default namespaces (http://www.w3.org/TR/css3-namespace/#declaration)
+Don't conflict with Object#extend.
+http://camendesign.com/design/ provides some interesting formatting and nesting issues for sass-convert
