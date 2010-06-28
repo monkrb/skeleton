@@ -26,8 +26,6 @@ class Monk::Glue < Sinatra::Base
   set :static, true
   set :views, root_path("app", "views")
 
-  use Rack::Session::Cookie
-
   configure :development do
     require "monk/glue/reloader"
 

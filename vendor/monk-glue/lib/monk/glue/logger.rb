@@ -1,6 +1,5 @@
 require 'logger'
 
-# TODO Add documentation.
 def logger
   $logger ||= begin
     $logger = ::Logger.new(root_path("log", "#{RACK_ENV}.log"))
