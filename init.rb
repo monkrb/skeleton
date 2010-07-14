@@ -3,7 +3,7 @@ ROOT_DIR = File.expand_path(File.dirname(__FILE__)) unless defined? ROOT_DIR
 require "rubygems"
 
 begin
-  require "vendor/dependencies/lib/dependencies"
+  require File.expand_path("vendor/dependencies/lib/dependencies", File.dirname(__FILE__))
 rescue LoadError
   require "dependencies"
 end
