@@ -123,18 +123,18 @@ module Stories
   end
 end
 
-Test::Unit::AutoRunner::RUNNERS[:stories] = proc do |r|
-  Stories::Runner
-end
-
-Test::Unit::AutoRunner::RUNNERS[:"stories-pdf"] = proc do |r|
-  begin
-    Stories::Runner::PDF
-  rescue NameError
-    require File.expand_path(File.dirname(__FILE__) + "/runner/pdf")
-    Stories::Runner::PDF
-  end
-end
+# Test::Unit::AutoRunner::RUNNERS[:stories] = proc do |r|
+#   Stories::Runner
+# end
+#
+# Test::Unit::AutoRunner::RUNNERS[:"stories-pdf"] = proc do |r|
+#   begin
+#     Stories::Runner::PDF
+#   rescue NameError
+#     require File.expand_path(File.dirname(__FILE__) + "/runner/pdf")
+#     Stories::Runner::PDF
+#   end
+# end
 
 # Common Webrat steps.
 module Stories::Webrat

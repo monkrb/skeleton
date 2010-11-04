@@ -5,7 +5,6 @@ require File.expand_path(File.join(File.dirname(__FILE__), "..", "init"))
 require "rack/test"
 require "contest"
 require "override"
-require "quietbacktrace"
 
 begin
   puts "Connected to Redis #{Ohm.redis.info[:redis_version]} on #{monk_settings(:redis)[:host]}:#{monk_settings(:redis)[:port]}, database #{monk_settings(:redis)[:db]}."

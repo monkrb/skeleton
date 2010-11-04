@@ -8,7 +8,6 @@ ohm 0.1.0 git://github.com/soveran/ohm.git
 syntax 1.0.0
 maruku 0.6.0
 override 0.0.10 (test) git://github.com/soveran/override.git
-quietbacktrace 0.1.1 git://github.com/thoughtbot/quietbacktrace.git
 rack 1.1.0 git://github.com/rack/rack.git
 rack-test 0.5.3 (test) git://github.com/brynary/rack-test.git
 redis 2.0.0 git://github.com/ezmobius/redis-rb.git
