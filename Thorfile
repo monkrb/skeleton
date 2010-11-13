@@ -30,6 +30,7 @@ class Monk < Thor
   def start(env = ENV["RACK_ENV"] || "development")
     verify_config(env)
     invoke :redis
+    say_status :success, "Starting Monk in #{env} environment"
 
     exec "env RACK_ENV=#{env} ruby init.rb"
   end
